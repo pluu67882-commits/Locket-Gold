@@ -1,16 +1,30 @@
-#!name=Locket Gold v1.1 - Dev HoangPhu
-#!desc=Mở khóa Premium Locket Gold (Bản sạch - Đã tối ưu hóa).
-#!category=Premium
-#!author=Dev HoangPhu
+#!name=Locket Gold - HoangPhu
+#!desc=Locket Gold by HoangPhu
+#!author=HoangPhu
+
+# script by HoangPhu
 
 [MITM]
 hostname = %APPEND% api.revenuecat.com, api.locketcamera.com, *.locketcamera.com
 
 [Header Rewrite]
 ^https?:\/\/api\.revenuecat\.com\/ header-del X-RevenueCat-ETag
+^https?:\/\/api\.revenuecat\.com\/.+ header-del If-None-Match
+^https?:\/\/api\.locketcamera\.com\/ header-del ETag
 
 [Script]
-Locket_Gold = type=http-response,pattern=^(https:\/\/api\.revenuecat\.com\/.+\/(receipts|subscribers)|https:\/\/api\.locketcamera\.com\/v1\/users\/self),requires-body=1,max-size=0,script-path=https://raw.githubusercontent.com/pluu67882-commits/Locket-Gold/main/locket_v1.1.js
+deleteHeader = type=http-request, pattern=^https://api.revenuecat.com/.+/(receipts|subscribers), script-path=https://api.dvsteam.vn/Locket_Gold/Shadowrocket/js/setHeader.js, timeout=60
+
+revenuecat = type=http-response, pattern=^https:\/\/api\.revenuecat\.com\/.+\/(receipts|subscribers), requires-body=1, max-size=0, script-path=https://raw.githubusercontent.com/DungHoang120401/Nobita/refs/heads/main/Scripts/Locket_Gold.js
+
+locket_user = type=http-response, pattern=^https:\/\/api\.locketcamera\.com\/v1\/users\/self, requires-body=1, max-size=0, script-path=https://raw.githubusercontent.com/pluu67882-commits/Locket-Gold/main/locket_v1.1.js
+
+locket_extra = type=http-response, pattern=^https:\/\/api\.locketcamera\.com\/v1\/(subscriptions|premium|status), requires-body=1, max-size=0, script-path=https://raw.githubusercontent.com/pluu67882-commits/Locket-Gold/main/locket_v1.1.js
 
 [Rule]
+DOMAIN,api.revenuecat.com,PROXY
+DOMAIN,api.locketcamera.com,PROXY
 ^https?:\/\/api\.locketcamera\.com\/v1\/subscriptions\/verify - reject
+DOMAIN-SUFFIX,loggly.com,REJECT
+DOMAIN-SUFFIX,analytics.io,REJECT
+FINAL,DIRECT
