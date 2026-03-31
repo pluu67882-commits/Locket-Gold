@@ -5,26 +5,14 @@
 # script by HoangPhu
 
 [MITM]
-hostname = %APPEND% api.revenuecat.com, api.locketcamera.com, *.locketcamera.com
+hostname = %APPEND% api.revenuecat.com, api.locketcamera.com, api.locket-camera.com, *.locketcamera.com, *.locket-camera.com
 
 [Header Rewrite]
-^https?:\/\/api\.revenuecat\.com\/ header-del X-RevenueCat-ETag
-^https?:\/\/api\.revenuecat\.com\/.+ header-del If-None-Match
-^https?:\/\/api\.locketcamera\.com\/ header-del ETag
+^https?:\/\/api\.(revenuecat\.com|locketcamera\.com|locket-camera\.com) header-del X-RevenueCat-ETag
+^https?:\/\/api\.(revenuecat\.com|locketcamera\.com|locket-camera\.com) header-del If-None-Match
+^https?:\/\/api\.(locketcamera\.com|locket-camera\.com) header-del ETag
+^https?:\/\/api\.(locketcamera\.com|locket-camera\.com)\/v1\/subscriptions\/verify - reject
+^https?:\/\/.*\.(loggly\.com|analytics\.io|app-measurement\.com|crashlytics\.com|firebaseio\.com)\/.* - reject
 
 [Script]
-deleteHeader = type=http-request, pattern=^https://api.revenuecat.com/.+/(receipts|subscribers), script-path=https://api.dvsteam.vn/Locket_Gold/Shadowrocket/js/setHeader.js, timeout=60
-
-revenuecat = type=http-response, pattern=^https:\/\/api\.revenuecat\.com\/.+\/(receipts|subscribers), requires-body=1, max-size=0, script-path=https://raw.githubusercontent.com/DungHoang120401/Nobita/refs/heads/main/Scripts/Locket_Gold.js
-
-locket_user = type=http-response, pattern=^https:\/\/api\.locketcamera\.com\/v1\/users\/self, requires-body=1, max-size=0, script-path=https://raw.githubusercontent.com/pluu67882-commits/Locket-Gold/main/locket_v1.1.js
-
-locket_extra = type=http-response, pattern=^https:\/\/api\.locketcamera\.com\/v1\/(subscriptions|premium|status), requires-body=1, max-size=0, script-path=https://raw.githubusercontent.com/pluu67882-commits/Locket-Gold/main/locket_v1.1.js
-
-[Rule]
-DOMAIN,api.revenuecat.com,PROXY
-DOMAIN,api.locketcamera.com,PROXY
-^https?:\/\/api\.locketcamera\.com\/v1\/subscriptions\/verify - reject
-DOMAIN-SUFFIX,loggly.com,REJECT
-DOMAIN-SUFFIX,analytics.io,REJECT
-FINAL,DIRECT
+Locket_Engine = type=http-response, pattern=^https?:\/\/(api\.revenuecat\.com\/.+\/(receipts|subscribers)|api\.(locketcamera\.com|locket-camera\.com)\/v1\/(users\/self|subscriptions|premium|status)), requires-body=1, max-size=0, script-path=https://raw.githubusercontent.com/pluu67882-commits/Locket-Gold/main/locket_v1.1.js, timeout=60
