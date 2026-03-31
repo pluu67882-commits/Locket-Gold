@@ -1,51 +1,106 @@
-#Locket Gold v1.1 - Author HoangPhu
+# Locket Gold v1.1 - Author HoangPhu
 
 const url = $request.url;
 let obj = JSON.parse($response.body || "{}");
-const appId = "com.locket.gold.yearly";
-const expireDate = "2035-12-31T23:59:59Z";
-const expireMs = 2082758400000;
-const rid = "30000" + Math.floor(Math.random() * 100000000);
 
-const goldData = {
-"expires_date": expireDate,
-"purchase_date": "2026-01-15T08:30:00Z",
-"original_purchase_date": "2026-01-15T08:30:00Z",
-"ownership_type": "PURCHASED",
-"store": "app_store",
-"is_sandbox": false,
-"product_identifier": appId,
-"original_transaction_id": rid,
-"transaction_id": rid,
-"period_type": "active"
+const userId = obj.subscriber?.original_app_user_id || "HoangPhu_Dev";
+const seed = userId.split('').reduce((a, b) => (Math.imul(31, a) + b.charCodeAt(0)) | 0, 0);
+const createRNG = (s) => () => (s = (Math.imul(1664525, s) + 1013904223) >>> 0) / 4294967296;
+
+const idRNG = createRNG(seed);
+const timeRNG = createRNG(seed ^ 0x601D);
+const genTID = (p) => p + Math.floor(idRNG() * 1000000000);
+
+const now = new Date();
+const getPastDate = (d, h=0) => new Date(now.getTime() - (d*86400000 + h*3600000)).toISOString();
+
+const eventDatabase = [
+    { type: "PURCHASE", date: getPastDate(730), tid: genTID("4000"), plan: "yearly" },
+    { type: "RENEW", date: getPastDate(365), tid: genTID("5000"), plan: "yearly" },
+    { type: "BILLING_ERROR", date: getPastDate(15, 2), reason: "insufficient_funds" },
+    { type: "RETRY", date: getPastDate(14, 1), attempt: 1 },
+    { type: "RETRY", date: getPastDate(12, 4), attempt: 2 },
+    { type: "RECOVERED", date: getPastDate(10, 5), tid: genTID("6000"), plan: "yearly" }
+];
+
+let state = {
+    status: "EXPIRED",
+    isActive: false,
+    expiryDate: null,
+    lastPurchase: null,
+    currentTID: null,
+    wasInRetry: false
+};
+
+eventDatabase.forEach(ev => {
+    const evDate = new Date(ev.date);
+    
+    switch (ev.type) {
+        case "PURCHASE":
+        case "RENEW":
+        case "RECOVERED":
+            state.status = "ACTIVE";
+            state.isActive = true;
+            state.lastPurchase = ev.date;
+            state.currentTID = ev.tid || state.currentTID;
+            let exp = new Date(evDate);
+            exp.setFullYear(exp.getFullYear() + (ev.plan === "yearly" ? 1 : 0));
+            if (ev.plan === "monthly") exp.setMonth(exp.getMonth() + 1);
+            state.expiryDate = exp.toISOString();
+            break;
+
+        case "BILLING_ERROR":
+        case "RETRY":
+            state.wasInRetry = true;
+            const isWithinGrace = state.expiryDate && (evDate < new Date(state.expiryDate));
+            state.status = isWithinGrace ? "BILLING_RETRY" : "EXPIRED";
+            state.isActive = isWithinGrace;
+            break;
+    }
+});
+
+const sTime = new Date(now.getTime() - (Math.floor(timeRNG() * 2000) + 1000)).toISOString();
+const safeExpiry = state.expiryDate || getPastDate(-365);
+
+const revenueCatSchema = {
+    "product_identifier": "com.locket.gold.yearly",
+    "original_purchase_date": eventDatabase[0].date,
+    "purchase_date": state.lastPurchase || eventDatabase[0].date,
+    "expires_date": safeExpiry,
+    "original_transaction_id": eventDatabase[0].tid,
+    "transaction_id": state.currentTID || eventDatabase[0].tid,
+    "store": "app_store",
+    "ownership_type": "PURCHASED",
+    "period_type": "active"
 };
 
 try {
-if (url.includes("api.revenuecat.com")) {
-obj.subscriber = obj.subscriber || {};
-obj.subscriber.entitlements = obj.subscriber.entitlements || {};
-obj.subscriber.subscriptions = obj.subscriber.subscriptions || {};
-obj.subscriber.entitlements["gold"] = goldData;
-obj.subscriber.entitlements["premium"] = goldData;
-obj.subscriber.subscriptions[appId] = goldData;
-obj.subscriber.request_date = new Date().toISOString();
-}
-if (url.includes("/v1/users/self")) {
-if (obj.data) {
-obj.data.is_gold = true;
-obj.data.premium_status = "active";
-obj.data.is_premium = true;
-obj.data.subscriptions = obj.data.subscriptions || [];
-obj.data.subscriptions.push({
-"product_id": appId,
-"expires_date_ms": expireMs,
-"status": "active",
-"is_active": true
-});
-obj.data.receipt_validation_status = "valid";
-}
-}
-$done({ body: JSON.stringify(obj) });
-} catch (e) {
-$done({});
-}
+    if (url.includes("api.revenuecat.com")) {
+        obj.subscriber = obj.subscriber || {};
+        obj.subscriber.entitlements = { "gold": revenueCatSchema };
+        obj.subscriber.subscriptions = { "com.locket.gold.yearly": revenueCatSchema };
+        obj.subscriber.request_date = sTime;
+        obj.subscriber.last_seen = sTime;
+    }
+
+    if (url.includes("/v1/users/self")) {
+        if (obj.data) {
+            obj.data.is_gold = state.isActive;
+            obj.data.premium_status = state.status.toLowerCase();
+            obj.data.subscriptions = [{
+                "product_id": "com.locket.gold.yearly",
+                "original_transaction_id": eventDatabase[0].tid,
+                "transaction_id": state.currentTID,
+                "purchase_date_ms": new Date(state.lastPurchase).getTime(),
+                "expires_date_ms": new Date(safeExpiry).getTime(),
+                "status": state.status === "ACTIVE" ? "active" : "billing_retry",
+                "is_active": state.isActive,
+                "was_in_billing_retry_period": state.wasInRetry
+            }];
+            obj.data.last_active_at = sTime;
+        }
+    }
+    $done({ body: JSON.stringify(obj) });
+} catch (e) { 
+    $done({}); 
+  }
